@@ -77,14 +77,6 @@ void Astronet::refresh(){
   }
 };
 
-/*!
- * \brief Send data throw mesh Network
- * \param _to reciever node _address
- * \param payload the data that you want to trasfer
- * \details this function handle trafsering data to destination node of
- * mesh network
-*/
-
 bool Astronet::write(uint16_t _to, Payload payload){
     Transit tx = {payload,false,milis()};
     radio.openWritingPipe(_to);
@@ -92,7 +84,7 @@ bool Astronet::write(uint16_t _to, Payload payload){
 
     if (!radio.write( &payload, __ASTRONET_PAYLOAD_SIZE )){
       radio.startListening();
-      Serial.println(F("failed."));
+      printf("failed.");
       removeNeighbor(payload.to);
       failed++;
       return false;
@@ -105,6 +97,31 @@ bool Astronet::write(uint16_t _to, Payload payload){
       return true;
     }
   };
+
+/*!
+ * \brief Send data throw mesh Network
+ * \param to reciever node _address
+ * \param *data pointer to data that you want to trasfer
+ * \param size size of data packet (Max 24bit)
+ * \details this function handle trafsering data to destination node of
+ * mesh network
+*/
+bool send(uint8_t to,uint8_t *data,uint8_t size){
+  Payload packet;
+  packet.type = __ASTRONET_NORMAL_PACKET_TYPE;
+  packet.to = to;
+  packet.from = address;
+  packet.scs = to ^ address;
+  packet.id = id;
+  packet.router = address;
+  memcpy(packet.data,data,size);
+  for(uint8_t i=size;i<24;i++){
+    packet.data[i]=0x00;
+  }
+  packet.ndb = dataSetBits(packet.data);
+  id++;
+  return write(to,packet);
+};
 
 bool Astronet::getData(Payload &item){
  if(inbound_inedx > 0){
