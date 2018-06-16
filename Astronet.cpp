@@ -242,6 +242,7 @@ void Astronet::initial(){
 void Astronet::setNewAddress(uint8_t _address){
     EEPROM.put(__ASTRONET_EEPROM_NODE_ADDRESS_START, _address);
     address = _address;
+    begin(); // listen on new address
 };
 
 bool Astronet::addToOutbound(Traffic tx){
