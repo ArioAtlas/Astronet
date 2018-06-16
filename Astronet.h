@@ -32,6 +32,8 @@ typedef struct Payload {
   uint8_t router; //!< last sender address
   uint8_t data[24]; //!< 24bit data array
   uint8_t ndb; //!< number of SET bits in data array
+  bool operator==(const Payload& second);
+  bool operator!=(const Payload& second);
 } Payload;
 
 // typedef union Transit {
@@ -51,11 +53,13 @@ class Astronet{
   private:
     static int id;
     bool chipReady;
-    uint16_t address;
+    uint8_t address;
     Traffic inbound[__ASTRONET_MAX_INBOUND_BUFFER];
     uint8_t inbound_inedx;
     Traffic outbound[__ASTRONET_MAX_OUTBOUND_BUFFER];
     uint8_t outbound_inedx;
+    uint32_t history[__ASTRONET_MAX_HISTORY_SIZE];
+    uint8_t history_inedx;
     uint16_t neighbors[__ASTRONET_MAX_NEIGHBORS_MEMORY];
     uint8_t neighbor_index;
     RF24& radio;
@@ -64,6 +68,8 @@ class Astronet{
     static int failed;
     static int overflow;
     static int junk;
+    static int duplicate;
+    static int damaged;
   public:
     Astronet(RF24& _radio);
 
@@ -76,10 +82,6 @@ class Astronet{
     bool write(uint16_t _to, Payload payload);
 
     bool getData(Payload &item);
-
-    bool savePacket(Payload &item);
-
-    void updateLogs();
 
     void addNeighbor(uint16_t address);
 
@@ -111,7 +113,7 @@ class Astronet{
 
     uint8_t dataSetBits(Payload packet);
 
-    bool send(uint8_t to,uint8_t *data,uint8_t size);
+    bool send(uint8_t to,void *data,uint8_t size);
 };
 
 

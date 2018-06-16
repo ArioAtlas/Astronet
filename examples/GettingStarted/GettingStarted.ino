@@ -3,14 +3,12 @@
 #include "RF24.h"
 #include "printf.h"
 
+#define ASTRONET_BASE_NODE
+
 #include <stddef.h>
 #include <stdint.h>
-
 #include <Astronet_config.h>
 #include <Astronet.h>
-
-
-#define ASTRONET_BASE_NODE
 
 // Hardware configuration: Set up nRF24L01 radio on SPI bus plus pins 7 & 8
 RF24 radio(7, 8);
@@ -24,10 +22,10 @@ void setup() {
 
   // Setup and configure rf radio
   radio.begin();
-  radio.setAutoAck(1);                    // Ensure autoACK is enabled
-  radio.enableAckPayload();               // Allow optional ack payloads
+  radio.setAutoAck(1);       // Ensure autoACK is enabled
+  radio.enableAckPayload();  // Allow optional ack payloads
   radio.setRetries(__ASTRONET_RETRY_DELAY,__ASTRONET_RETRY_MAX_NUMBER);                 // Smallest time between retries, max no. of retries
-  radio.setPayloadSize(__ASTRONET_PAYLOAD_SIZE);                // Here we are sending 1-byte payloads to test the call-response speed
+  radio.setPayloadSize(__ASTRONET_PAYLOAD_SIZE);  // Here we are sending 1-byte payloads to test the call-response speed
 
   network.begin();
 }
@@ -43,14 +41,18 @@ void loop(void) {
     Serial.print(" ");
     Serial.print(data.to, HEX);
     Serial.print(" ");
+    Serial.print(data.scs, HEX);
+    Serial.print(" ");
     Serial.print(data.id, HEX);
     Serial.print(" ");
-    Serial.print(data.cmd, HEX);
+    Serial.print(data.router, HEX);
     Serial.print(" ");
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 24; i++) {
       Serial.print(data.data[i], HEX);
       Serial.print("|");
     }
+    Serial.print(" ");
+    Serial.print(data.ndb, HEX);
     Serial.println("");
   }
 
@@ -62,10 +64,29 @@ void loop(void) {
       case 'I':
           Serial.println(F("*** NODE INITIALIZE PROCESS -- PRESS 'M' TO MAIN MENU"));
           break;
-      case 'R':
-          radio.printDetails();                   // Dump the configuration of the rf unit for debugging
+      case 'D':
+          radio.printDetails(); // Dump the configuration of the rf unit for debugging
           break;
-
+      case 'T':
+          {char tx_data[] = "Hi 0xFF, are you there?";
+          network.send(0xFF,tx_data,24);}
+          break;
+      case 'P':
+          {Serial.println(F("*** TRANSFERING 100 PATCH TO 0xFFFF"));
+          for(int j=0;j<10;j++){
+            char tx_data2[] = "Hi, are you there? [P0]";
+            tx_data2[21] = j+48;
+            network.send(0xFF,tx_data2,24);
+          }}
+          break;
+      case 'B':
+          {Serial.println(F("*** GOTO BASE MODE"));
+          network.setNewAddress(0x00);}
+          break;
+       case 'R':
+          {Serial.println(F("*** GOTO NODE MODE"));
+          network.setNewAddress(0x21);}
+          break;
     }
   }
 

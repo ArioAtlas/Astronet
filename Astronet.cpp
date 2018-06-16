@@ -9,11 +9,13 @@
 #include <EEPROM.h>
 
 
-int Astronet::id = 0;
+int Astronet::id = 1;
 int Astronet::success=0;
 int Astronet::failed=0;
 int Astronet::overflow=0;
 int Astronet::junk=0;
+int Astronet::duplicate=0;
+int Astronet::damaged=0;
 
 Astronet::Astronet(RF24& _radio):radio(_radio){
   initial();
@@ -33,7 +35,6 @@ bool Astronet::updateAddress(uint16_t _address){
 };
 
 void Astronet::refresh(){
-  updateLogs();
   if(radio.isChipConnected()){
     byte pipeNo;
     Payload data;
@@ -55,19 +56,23 @@ void Astronet::refresh(){
         switch(pipeNo){
           case 1:
               // Real data receiving
-              if(data.to == address)
-                handleIncoming(data);
-              else
-                route(data.to,data);
+              if(data.type<__ASTRONET_ACK_TYPE_DIVIDER){
+                if(data.to == address)
+                  handleIncoming(data);
+                else
+                  route(data.to,data);
+              }
               break;
           case 2:
               // aknowledge data receiving
-              handleAcknowledge(data);
+              if(data.type>=__ASTRONET_ACK_TYPE_DIVIDER)
+                handleAcknowledge(data);
               break;
         };
       }
       else{
         printf("\nSCS miss match... [Junk data]");
+        junk++;
       }
    };
   }
@@ -78,7 +83,7 @@ void Astronet::refresh(){
 };
 
 bool Astronet::write(uint16_t _to, Payload payload){
-    Transit tx = {payload,false,milis()};
+    Traffic tx = {payload,false,millis()};
     radio.openWritingPipe(_to);
     radio.stopListening();
 
@@ -89,7 +94,7 @@ bool Astronet::write(uint16_t _to, Payload payload){
       failed++;
       return false;
     }else{
-      printf("\n Packet sent in %dms",(milis-tx.time));
+      printf("\n Packet sent in %dms",(millis()-tx.time));
       addToOutbound(tx);
       radio.startListening();
       addNeighbor(payload.to);
@@ -106,9 +111,9 @@ bool Astronet::write(uint16_t _to, Payload payload){
  * \details this function handle trafsering data to destination node of
  * mesh network
 */
-bool send(uint8_t to,uint8_t *data,uint8_t size){
+bool Astronet::send(uint8_t to,void *data,uint8_t size){
   Payload packet;
-  packet.type = __ASTRONET_NORMAL_PACKET_TYPE;
+  packet.type = 0;
   packet.to = to;
   packet.from = address;
   packet.scs = to ^ address;
@@ -118,8 +123,8 @@ bool send(uint8_t to,uint8_t *data,uint8_t size){
   for(uint8_t i=size;i<24;i++){
     packet.data[i]=0x00;
   }
-  packet.ndb = dataSetBits(packet.data);
-  id++;
+  packet.ndb = dataSetBits(packet);
+  id= (id!=255)?id+1:1;
   return write(to,packet);
 };
 
@@ -132,32 +137,6 @@ bool Astronet::getData(Payload &item){
    return true;
  }
  return false;
-};
-
-bool Astronet::savePacket(Payload &item){
- if(inbound_inedx < __ASTRONET_MAX_INBOUND_BUFFER){
-   inbound[inbound_inedx] = item;
-   inbound_inedx++;
-   return true;
- }
- return false;
-};
-
-void Astronet::updateLogs(){
- if(history_inedx > 0){
-   uint8_t index;
-   for(index=0; index<history_inedx; index++){
-     if((millis() - history[index].receive_time) < __ASTRONET_HISTORY_CLEAR_TIMEOUT){
-       break;
-     }
-   }
-
-   if(index>0){
-     history_inedx-=index;
-     if(history_inedx)
-        memcpy(history,history+index,sizeof(Traffic)*history_inedx);
-   }
- }
 };
 
 void Astronet::addNeighbor(uint16_t address){
@@ -247,21 +226,16 @@ void Astronet::loadAddress(){
 
 void Astronet::initial(){
   chipReady = true;
-  uint32_t checksum;
-  EEPROM.get( __ASTRONET_EEPROM_INITIAL_ADDRESS_START, checksum );
-  if(checksum != __ASTRONET_EEPROM_NODE_CHECKSUM){
-    #ifdef ASTRONET_BASE_NODE
-      EEPROM.put(__ASTRONET_EEPROM_NODE_ADDRESS_START, __ASTRONET_BASE_NODE_ADDRESS);
-    #else
-      EEPROM.put(__ASTRONET_EEPROM_NODE_ADDRESS_START, __ASTRONET_BLIND_NODE_ADDRESS);
-    #endif
-    EEPROM.put(__ASTRONET_EEPROM_PIN_ADDRESS_START, __ASTRONET_DEFAULT_PIN_NUMBER);
-    EEPROM.put(__ASTRONET_EEPROM_INITIAL_ADDRESS_START, __ASTRONET_EEPROM_NODE_CHECKSUM);
-  }
+  #ifdef ASTRONET_BASE_NODE
+    EEPROM.put(__ASTRONET_EEPROM_NODE_ADDRESS_START, __ASTRONET_BASE_NODE_ADDRESS);
+  #else
+    EEPROM.put(__ASTRONET_EEPROM_NODE_ADDRESS_START, __ASTRONET_BLIND_NODE_ADDRESS);
+  #endif
 
   inbound_inedx = 0;
-  history_inedx = 0;
+  outbound_inedx = 0;
   neighbor_index = 0;
+  history_inedx = 0;
 }
 
 void Astronet::setNewAddress(uint16_t _address){
@@ -290,29 +264,40 @@ bool Astronet::addToInbound(Traffic rx){
 void Astronet::handleIncoming(Payload packet){
     if(packet.ndb == dataSetBits(packet)){
       bool trash = false;
-      for(int i=0; i<inbound;i++){
-        if(inbound[i].packet !=packet){
+      for(int i=0; i<inbound_inedx;i++){
+        if(inbound[i].packet == packet){
           trash=true;
           printf("\nDuplicate Data... [Nothing to do]");
+          duplicate++;
           break;
         }
       }
 
       if(!trash){
         Traffic rx = {packet,false,millis()};
-        if(!addToInbound(rx))
+        if(!addToInbound(rx)){
           printf("\nIncoming buffer is full... [Data lost]");
+          overflow++;
+        }
+
         addNeighbor(packet.router);
       }
     }
     else{
       printf("\nNDB miss match... [Corrupted data]");
+      damaged++;
     }
 
 };
 
-void Astronet::handleAcknowledge(Payload data){
-
+void Astronet::handleAcknowledge(Payload packet){
+  packet.type -= __ASTRONET_ACK_TYPE_DIVIDER;
+  for(int i=0; i<inbound_inedx;i++){
+    if(inbound[i].packet !=packet){
+      inbound[i].ack = true;
+      break;
+    }
+  }
 };
 
 uint8_t Astronet::dataSetBits(Payload packet){
@@ -320,9 +305,35 @@ uint8_t Astronet::dataSetBits(Payload packet){
     uint32_t* i;
     for(uint8_t j=0;j<sizeof(packet.data);j+=4){
       i = (uint32_t*)&packet.data[j];
-      i = i - ((i >> 1) & 0x55555555);
-      i = (i & 0x33333333) + ((i >> 2) & 0x33333333);
-      num+= (((i + (i >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
+      *i = *i - ((*i >> 1) & 0x55555555);
+      *i = (*i & 0x33333333) + ((*i >> 2) & 0x33333333);
+      num+= (((*i + (*i >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
     }
     return num;
 };
+
+bool Payload::operator==(const Payload& second)
+{
+    if(type==second.type
+      && from==second.from
+      && to==second.to
+      && scs==second.scs
+      && id==second.id
+      && router==second.router
+      && ndb==second.ndb)
+      return true;
+    return false;
+}
+
+bool Payload::operator!=(const Payload& second)
+{
+    if(type==second.type
+      && from==second.from
+      && to==second.to
+      && scs==second.scs
+      && id==second.id
+      && router==second.router
+      && ndb==second.ndb)
+      return true;
+    return false;
+}
