@@ -18,9 +18,9 @@ int Astronet::duplicate=0;
 int Astronet::damaged=0;
 
 Astronet::Astronet(RF24& _radio):radio(_radio){
-  initial();
   loadPin();
   loadAddress();
+  initial();
   };
 
 void Astronet::begin(){
@@ -41,18 +41,9 @@ void Astronet::refresh(){
     while( radio.available(&pipeNo)){
       printf("\n\ndata available on pipe#%d",pipeNo);
       radio.read( &data, __ASTRONET_PAYLOAD_SIZE );
-      radio.writeAckPayload(pipeNo,&address, 2 );
-
-      printf("\nRX = %x",data.from);
-      printf(" %x",data.to);
-      printf(" %x",data.id);
-      printf(" %x |",data.scs);
-      for (int i = 0; i < 24; i++) {
-        printf("%x,",data.data[i]);
-      }
-      printf("|\n");
 
       if(data.scs == (data.from ^ data.to)){
+        radio.writeAckPayload(pipeNo,&address, 2 );
         switch(pipeNo){
           case 1:
               // Real data receiving
@@ -130,7 +121,7 @@ bool Astronet::send(uint8_t to,void *data,uint8_t size){
 
 bool Astronet::getData(Payload &item){
  if(inbound_inedx > 0){
-   Payload item = inbound[0].packet;
+   item = inbound[0].packet;
    inbound_inedx--;
    if(inbound_inedx)
       memcpy(inbound,inbound+1,sizeof(Traffic)*inbound_inedx);
@@ -227,12 +218,6 @@ void Astronet::loadAddress(){
 
 void Astronet::initial(){
   chipReady = true;
-  #ifdef ASTRONET_BASE_NODE
-    EEPROM.put(__ASTRONET_EEPROM_NODE_ADDRESS_START, __ASTRONET_BASE_NODE_ADDRESS);
-  #else
-    EEPROM.put(__ASTRONET_EEPROM_NODE_ADDRESS_START, __ASTRONET_BLIND_NODE_ADDRESS);
-  #endif
-
   inbound_inedx = 0;
   outbound_inedx = 0;
   neighbor_index = 0;
@@ -312,6 +297,35 @@ uint8_t Astronet::dataSetBits(Payload packet){
       num+= (((*i + (*i >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
     }
     return num;
+};
+
+void Astronet::parsePaket(Payload& paket){
+  printf("\nRX=> FROM:%x",paket.from);
+  printf("TO:%x",paket.to);
+  printf("SCS:%x ",paket.scs);
+  printf("ID:%x ",paket.id);
+  printf("DATA:[");
+  for (int i = 0; i < 24; i++) {
+    printf("%x,",paket.data[i]);
+  }
+  printf("] NDB:%x",paket.ndb);
+  printf("\n");
+};
+
+void Astronet::readInfo(){
+  printf("********** ASTRONET INFO **********\n");
+  printf("Node:%x\n", address);
+  printf("PIN:%x\n", pin);
+  printf("InBound:%d\n", inbound_inedx);
+  printf("OutBound:%d\n", outbound_inedx);
+  printf("History:%d\n", history_inedx);
+  printf("Neighbour:%d\n", neighbor_index);
+  printf("Success:%d\n", success);
+  printf("Failed:%d\n", failed);
+  printf("Oerflow:%d\n", overflow);
+  printf("Junk:%d\n", junk);
+  printf("Duplicate:%d\n", duplicate);
+  printf("Damaged:%d\n", damaged);
 };
 
 bool Payload::operator==(const Payload& second){

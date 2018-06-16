@@ -114,6 +114,10 @@ class Astronet{
     uint8_t dataSetBits(Payload packet);
 
     bool send(uint8_t to,void *data,uint8_t size);
+
+    void parsePaket(Payload& paket);
+
+    void readInfo();
 };
 
 
