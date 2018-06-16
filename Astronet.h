@@ -60,7 +60,7 @@ class Astronet{
     uint8_t outbound_inedx;
     uint32_t history[__ASTRONET_MAX_HISTORY_SIZE];
     uint8_t history_inedx;
-    uint16_t neighbors[__ASTRONET_MAX_NEIGHBORS_MEMORY];
+    uint8_t neighbors[__ASTRONET_MAX_NEIGHBORS_MEMORY];
     uint8_t neighbor_index;
     RF24& radio;
     uint64_t pin;
@@ -75,23 +75,23 @@ class Astronet{
 
     void begin();
 
-    bool updateAddress(uint16_t _address);
+    bool updateAddress(uint8_t _address);
 
     void refresh();
 
-    bool write(uint16_t _to, Payload payload);
+    bool write(uint8_t _to, Payload payload);
 
     bool getData(Payload &item);
 
-    void addNeighbor(uint16_t address);
+    void addNeighbor(uint8_t address);
 
-    void removeNeighbor(uint16_t address);
+    void removeNeighbor(uint8_t address);
 
     bool available();
 
-    void route(uint16_t _to,Payload &data);
+    void route(uint8_t _to,Payload &data);
 
-    uint16_t retrieveNewAddress(Payload &packet);
+    uint8_t retrieveNewAddress(Payload &packet);
 
     bool checkPin(Payload &packet);
 
@@ -101,7 +101,7 @@ class Astronet{
     void loadAddress();
     void initial();
 
-    void setNewAddress(uint16_t _address);
+    void setNewAddress(uint8_t _address);
 
     bool addToOutbound(Traffic tx);
 

@@ -30,7 +30,7 @@ void Astronet::begin(){
   radio.startListening();                 // Start listening
 };
 
-bool Astronet::updateAddress(uint16_t _address){
+bool Astronet::updateAddress(uint8_t _address){
   address=_address;
 };
 
@@ -82,7 +82,7 @@ void Astronet::refresh(){
   }
 };
 
-bool Astronet::write(uint16_t _to, Payload payload){
+bool Astronet::write(uint8_t _to, Payload payload){
     Traffic tx = {payload,false,millis()};
     radio.openWritingPipe(_to);
     radio.stopListening();
@@ -139,7 +139,7 @@ bool Astronet::getData(Payload &item){
  return false;
 };
 
-void Astronet::addNeighbor(uint16_t address){
+void Astronet::addNeighbor(uint8_t address){
   if(address != __ASTRONET_BLIND_NODE_ADDRESS){
     uint8_t found = false;
     for(int i=0; i<neighbor_index; i++){
@@ -157,7 +157,7 @@ void Astronet::addNeighbor(uint16_t address){
   }
 };
 
-void Astronet::removeNeighbor(uint16_t address){
+void Astronet::removeNeighbor(uint8_t address){
   if(address != __ASTRONET_BLIND_NODE_ADDRESS){
     if(neighbor_index > 0){
       uint8_t index=neighbor_index;
@@ -171,7 +171,7 @@ void Astronet::removeNeighbor(uint16_t address){
       if(index<neighbor_index){
         neighbor_index--;
         if(neighbor_index && neighbor_index!=index)
-           memcpy(neighbors+index,neighbors+index+1,sizeof(uint16_t)*(neighbor_index-index));
+           memcpy(neighbors+index,neighbors+index+1,sizeof(uint8_t)*(neighbor_index-index));
       }
     }
   }
@@ -185,7 +185,7 @@ bool Astronet::available(){
 };
 
 // need update for filtering already sended neighbours
-void Astronet::route(uint16_t _to,Payload &data){
+void Astronet::route(uint8_t _to,Payload &data){
   if(!write(_to,data)){
     for(int i=0; i<neighbor_index; i++){
       if(neighbors[i] != data.from)
@@ -194,7 +194,8 @@ void Astronet::route(uint16_t _to,Payload &data){
   }
 };
 
-uint16_t Astronet::retrieveNewAddress(Payload &packet){
+// need update
+uint8_t Astronet::retrieveNewAddress(Payload &packet){
     return packet.data[1]&&(0x0000FFFF);
 };
 
@@ -238,7 +239,7 @@ void Astronet::initial(){
   history_inedx = 0;
 }
 
-void Astronet::setNewAddress(uint16_t _address){
+void Astronet::setNewAddress(uint8_t _address){
     EEPROM.put(__ASTRONET_EEPROM_NODE_ADDRESS_START, _address);
     address = _address;
 };
@@ -312,8 +313,7 @@ uint8_t Astronet::dataSetBits(Payload packet){
     return num;
 };
 
-bool Payload::operator==(const Payload& second)
-{
+bool Payload::operator==(const Payload& second){
     if(type==second.type
       && from==second.from
       && to==second.to
@@ -325,8 +325,7 @@ bool Payload::operator==(const Payload& second)
     return false;
 }
 
-bool Payload::operator!=(const Payload& second)
-{
+bool Payload::operator!=(const Payload& second){
     if(type==second.type
       && from==second.from
       && to==second.to
