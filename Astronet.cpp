@@ -26,8 +26,8 @@ Astronet::Astronet(RF24& _radio):radio(_radio){
 void Astronet::begin(){
   printf("\nStart reading at %x",address );
   radio.openReadingPipe(1,address);
-  radio.openReadingPipe(2,address+1);
-  radio.startListening();                 // Start listening
+  radio.startListening();
+  radio.writeAckPayload(1,&address, 2);
 };
 
 bool Astronet::updateAddress(uint8_t _address){
@@ -35,42 +35,27 @@ bool Astronet::updateAddress(uint8_t _address){
 };
 
 void Astronet::refresh(){
-  if(radio.isChipConnected()){
     byte pipeNo;
-    Payload data;
-    while( radio.available(&pipeNo)){
-      printf("\n\ndata available on pipe#%d",pipeNo);
-      radio.read( &data, __ASTRONET_PAYLOAD_SIZE );
-
-      if(data.scs == (data.from ^ data.to)){
-        radio.writeAckPayload(pipeNo,&address, 2 );
-        switch(pipeNo){
-          case 1:
-              // Real data receiving
-              if(data.type<__ASTRONET_ACK_TYPE_DIVIDER){
-                if(data.to == address)
-                  handleIncoming(data);
-                else
-                  route(data.to,data);
-              }
-              break;
-          case 2:
-              // aknowledge data receiving
-              if(data.type>=__ASTRONET_ACK_TYPE_DIVIDER)
-                handleAcknowledge(data);
-              break;
-        };
+    while( radio.available(&pipeNo)&&radio.isChipConnected()){
+      printf("\n\nRX on pipe#%d",pipeNo);
+      radio.read( &temp, __ASTRONET_PAYLOAD_SIZE );
+      if(temp.scs == (temp.from ^ temp.to)){
+        if(temp.type<__ASTRONET_ACK_TYPE_DIVIDER){
+          if(temp.to == address)
+            handleIncoming(temp);
+          else{
+            temp.router = address;
+            route(temp.to,temp);
+          }
+        }
+        // aknowledge data receiving
+        if(temp.type>=__ASTRONET_ACK_TYPE_DIVIDER)
+          handleAcknowledge(temp);
       }
       else{
-        printf("\nSCS miss match... [Junk data]");
         junk++;
       }
    };
-  }
-  else{
-      printf("\nRadio is disconnected or damaged!");
-      delay(5000);
-  }
 };
 
 bool Astronet::write(uint8_t _to, Payload payload){
@@ -80,12 +65,12 @@ bool Astronet::write(uint8_t _to, Payload payload){
 
     if (!radio.write( &payload, __ASTRONET_PAYLOAD_SIZE )){
       radio.startListening();
-      printf("failed.");
+      printf("\nfailed");
       removeNeighbor(payload.to);
       failed++;
       return false;
     }else{
-      printf("\n Packet sent in %dms",(millis()-tx.time));
+      printf("\nsent in %dms",(millis()-tx.time));
       addToOutbound(tx);
       radio.startListening();
       addNeighbor(payload.to);
@@ -179,8 +164,11 @@ bool Astronet::available(){
 void Astronet::route(uint8_t _to,Payload &data){
   if(!write(_to,data)){
     for(int i=0; i<neighbor_index; i++){
-      if(neighbors[i] != data.from)
+      if(neighbors[i] != data.from){
+        printf("\n#Neighbour Route *%x",neighbors[i]);
+        parsePaket(data);
         write(neighbors[i],data);
+      }
     }
   }
 };
@@ -300,10 +288,11 @@ uint8_t Astronet::dataSetBits(Payload packet){
 };
 
 void Astronet::parsePaket(Payload& paket){
-  printf("\nRX=> FROM:%x",paket.from);
-  printf("TO:%x",paket.to);
+  printf("\nRX=> FROM:%x ",paket.from);
+  printf("TO:%x ",paket.to);
   printf("SCS:%x ",paket.scs);
   printf("ID:%x ",paket.id);
+  printf("ROUTER:%x ",paket.router);
   printf("DATA:[");
   for (int i = 0; i < 24; i++) {
     printf("%x,",paket.data[i]);
@@ -326,6 +315,12 @@ void Astronet::readInfo(){
   printf("Junk:%d\n", junk);
   printf("Duplicate:%d\n", duplicate);
   printf("Damaged:%d\n", damaged);
+};
+
+void Astronet::neighboursList(){
+  for(int i=0;i<neighbor_index;i++){
+    printf("%d => %x\n",i,neighbors[i] );
+  }
 };
 
 bool Payload::operator==(const Payload& second){

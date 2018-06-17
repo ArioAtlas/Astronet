@@ -70,6 +70,8 @@ class Astronet{
     static int junk;
     static int duplicate;
     static int damaged;
+
+    Payload temp;
   public:
     Astronet(RF24& _radio);
 
@@ -118,6 +120,8 @@ class Astronet{
     void parsePaket(Payload& paket);
 
     void readInfo();
+
+    void neighboursList();
 };
 
 
