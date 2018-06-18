@@ -44,7 +44,6 @@ typedef struct Payload {
 typedef struct Traffic {
   Payload packet;
   bool ack;
-  unsigned long time;
 } Traffic;
 
 class RF24;
@@ -56,8 +55,6 @@ class Astronet{
     uint8_t address;
     Traffic inbound[__ASTRONET_MAX_INBOUND_BUFFER];
     uint8_t inbound_inedx;
-    Traffic outbound[__ASTRONET_MAX_OUTBOUND_BUFFER];
-    uint8_t outbound_inedx;
     uint32_t history[__ASTRONET_MAX_HISTORY_SIZE];
     uint8_t history_inedx;
     uint8_t neighbors[__ASTRONET_MAX_NEIGHBORS_MEMORY];
@@ -91,7 +88,7 @@ class Astronet{
 
     bool available();
 
-    void route(uint8_t _to,Payload &data);
+    bool route(uint8_t _to,Payload &data);
 
     uint8_t retrieveNewAddress(Payload &packet);
 
@@ -100,18 +97,16 @@ class Astronet{
     void acknowlede(Payload packet);
 
     void loadPin();
+
     void loadAddress();
+    
     void initial();
 
     void setNewAddress(uint8_t _address);
 
-    bool addToOutbound(Traffic tx);
-
     bool addToInbound(Traffic rx);
 
     void handleIncoming(Payload packet);
-
-    void handleAcknowledge(Payload packet);
 
     uint8_t dataSetBits(Payload packet);
 

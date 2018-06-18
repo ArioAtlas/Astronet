@@ -23,10 +23,7 @@ void setup() {
   // Setup and configure rf radio
   radio.begin();
   radio.setChannel(112);
-  radio.setAutoAck(1);       // Ensure autoACK is enabled
-  radio.enableDynamicPayloads();
-  radio.enableAckPayload();  // Allow optional ack payloads
-  radio.setRetries(__ASTRONET_RETRY_DELAY,__ASTRONET_RETRY_MAX_NUMBER);                 // Smallest time between retries, max no. of retries
+  radio.setAutoAck(false);       // Ensure autoACK is enabled
   radio.setPayloadSize(__ASTRONET_PAYLOAD_SIZE);  // Here we are sending 1-byte payloads to test the call-response speed
   radio.setDataRate(RF24_2MBPS);
 
@@ -58,7 +55,7 @@ void loop(void) {
           network.send(0x21,tx_data,24);}
           break;
       case 'P':
-          {Serial.println(F("*** TRANSFERING 10 PATCH"));
+          {Serial.println(F("\nTRANSFERING 100 PATCH"));
           for(int j=0;j<100;j++){
             char tx_data2[] = "Hi, are you there? [P0]";
             tx_data2[21] = j+48;
@@ -67,11 +64,11 @@ void loop(void) {
           }}
           break;
       case 'B':
-          {Serial.println(F("*** GOTO BASE MODE"));
+          {Serial.println(F("\nBASE MODE"));
           network.setNewAddress(0x01);}
           break;
        case 'N':
-          {Serial.println(F("*** GOTO NODE MODE"));
+          {Serial.println(F("\nNODE MODE"));
           network.setNewAddress(0x21);}
           break;
        case 'L':

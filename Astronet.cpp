@@ -24,10 +24,9 @@ Astronet::Astronet(RF24& _radio):radio(_radio){
   };
 
 void Astronet::begin(){
-  printf("\nStart reading at %x",address );
+  printf("\nListen at %x",address );
   radio.openReadingPipe(1,address);
   radio.startListening();
-  radio.writeAckPayload(1,&address, 2);
 };
 
 bool Astronet::updateAddress(uint8_t _address){
@@ -37,20 +36,21 @@ bool Astronet::updateAddress(uint8_t _address){
 void Astronet::refresh(){
     byte pipeNo;
     while( radio.available(&pipeNo)&&radio.isChipConnected()){
-      printf("\n\nRX on pipe#%d",pipeNo);
+      printf("\n\nRoP->#%d",pipeNo);
       radio.read( &temp, __ASTRONET_PAYLOAD_SIZE );
       if(temp.scs == (temp.from ^ temp.to)){
         if(temp.type<__ASTRONET_ACK_TYPE_DIVIDER){
-          if(temp.to == address)
+          if(temp.to == address){
+            printf("\nRX->handle");
             handleIncoming(temp);
+            acknowlede(temp);
+          }
           else{
+            printf("\nRouter");
             temp.router = address;
             route(temp.to,temp);
           }
         }
-        // aknowledge data receiving
-        if(temp.type>=__ASTRONET_ACK_TYPE_DIVIDER)
-          handleAcknowledge(temp);
       }
       else{
         junk++;
@@ -59,22 +59,38 @@ void Astronet::refresh(){
 };
 
 bool Astronet::write(uint8_t _to, Payload payload){
-    Traffic tx = {payload,false,millis()};
-    radio.openWritingPipe(_to);
-    radio.stopListening();
-
-    if (!radio.write( &payload, __ASTRONET_PAYLOAD_SIZE )){
+    unsigned long started_waiting_at = millis();
+    bool timeout = false;
+    uint8_t retry = 0;
+    Payload ply;
+    while (retry<__ASTRONET_RETRY_MAX_NUMBER) {
+      radio.openWritingPipe(_to);
+      radio.stopListening();
+      radio.write( &payload, __ASTRONET_PAYLOAD_SIZE );
       radio.startListening();
+      while ( ! radio.available() && ! timeout )
+        if (millis() - started_waiting_at > __ASTRONET_RETRY_DELAY )
+          timeout = true;
+      if (!timeout){
+        radio.read( &ply, 32 );
+        parsePaket(ply);
+        if(payload.type == (ply.type+__ASTRONET_ACK_TYPE_DIVIDER
+            && payload.to == ply.from
+            && payload.from == ply.to
+            && payload.id == ply.id))
+        break;
+      }
+      retry++;
+    }
+
+    if(retry ==__ASTRONET_RETRY_MAX_NUMBER){
       printf("\nfailed");
       removeNeighbor(payload.to);
-      failed++;
       return false;
-    }else{
-      printf("\nsent in %dms",(millis()-tx.time));
-      addToOutbound(tx);
-      radio.startListening();
+    }
+    else{
+      printf("\nDLV in %dms [R:%d]",(millis()-started_waiting_at),retry);
       addNeighbor(payload.to);
-      success++;
       return true;
     }
   };
@@ -89,7 +105,7 @@ bool Astronet::write(uint8_t _to, Payload payload){
 */
 bool Astronet::send(uint8_t to,void *data,uint8_t size){
   Payload packet;
-  packet.type = 0;
+  packet.type = 1;
   packet.to = to;
   packet.from = address;
   packet.scs = to ^ address;
@@ -101,7 +117,8 @@ bool Astronet::send(uint8_t to,void *data,uint8_t size){
   }
   packet.ndb = dataSetBits(packet);
   id= (id!=255)?id+1:1;
-  return write(to,packet);
+
+  return route(to,packet);
 };
 
 bool Astronet::getData(Payload &item){
@@ -153,23 +170,33 @@ void Astronet::removeNeighbor(uint8_t address){
   }
 };
 
-// need update
 bool Astronet::available(){
   if(inbound_inedx)
     return true;
   return false;
 };
 
-// need update for filtering already sended neighbours
-void Astronet::route(uint8_t _to,Payload &data){
-  if(!write(_to,data)){
+bool Astronet::route(uint8_t _to,Payload &data){
+  if(write(_to,data)){
+    success++;
+    return true;
+  }
+  else{
+    bool send = false;
     for(int i=0; i<neighbor_index; i++){
-      if(neighbors[i] != data.from){
+      if(neighbors[i] != data.from
+        && neighbors[i] != data.to
+        && neighbors[i] != data.router){
         printf("\n#Neighbour Route *%x",neighbors[i]);
-        parsePaket(data);
-        write(neighbors[i],data);
+        data.router = address;
+        send = send || write(neighbors[i],data);
       }
     }
+    if(send)
+      success++;
+    else
+      failed++;
+    return send;
   }
 };
 
@@ -186,14 +213,12 @@ bool Astronet::checkPin(Payload &packet){
 };
 
 void Astronet::acknowlede(Payload packet){
-  for(int i=0;i<6;i++){
-    packet.data[i] = ~packet.data[i];
-  }
-  packet.to = packet.to ^ packet.from;
-  packet.from = packet.to ^ packet.from;
-  packet.to = packet.to ^ packet.from;
-
-  route(packet.to,packet);
+  packet.type += __ASTRONET_ACK_TYPE_DIVIDER;
+  packet.to = packet.from;
+  packet.from = address;
+  packet.router = address;
+  write(packet.to,packet);
+  printf("\nError in writing ack *%x-[%x] to #%x",packet.type,packet.id,packet.to );
 };
 
 void Astronet::loadPin(){
@@ -207,7 +232,6 @@ void Astronet::loadAddress(){
 void Astronet::initial(){
   chipReady = true;
   inbound_inedx = 0;
-  outbound_inedx = 0;
   neighbor_index = 0;
   history_inedx = 0;
 }
@@ -216,15 +240,6 @@ void Astronet::setNewAddress(uint8_t _address){
     EEPROM.put(__ASTRONET_EEPROM_NODE_ADDRESS_START, _address);
     address = _address;
     begin(); // listen on new address
-};
-
-bool Astronet::addToOutbound(Traffic tx){
-     if(outbound_inedx < __ASTRONET_MAX_OUTBOUND_BUFFER){
-       outbound[outbound_inedx] = tx;
-       outbound_inedx++;
-       return true;
-     }
-     return false;
 };
 
 bool Astronet::addToInbound(Traffic rx){
@@ -242,16 +257,16 @@ void Astronet::handleIncoming(Payload packet){
       for(int i=0; i<inbound_inedx;i++){
         if(inbound[i].packet == packet){
           trash=true;
-          printf("\nDuplicate Data... [Nothing to do]");
+          printf("\nDuplicate Data...");
           duplicate++;
           break;
         }
       }
 
       if(!trash){
-        Traffic rx = {packet,false,millis()};
+        Traffic rx = {packet,false};
         if(!addToInbound(rx)){
-          printf("\nIncoming buffer is full... [Data lost]");
+          printf("\nIncoming buffer is full...");
           overflow++;
         }
 
@@ -259,20 +274,10 @@ void Astronet::handleIncoming(Payload packet){
       }
     }
     else{
-      printf("\nNDB miss match... [Corrupted data]");
+      printf("\nNDB miss match...");
       damaged++;
     }
 
-};
-
-void Astronet::handleAcknowledge(Payload packet){
-  packet.type -= __ASTRONET_ACK_TYPE_DIVIDER;
-  for(int i=0; i<inbound_inedx;i++){
-    if(inbound[i].packet !=packet){
-      inbound[i].ack = true;
-      break;
-    }
-  }
 };
 
 uint8_t Astronet::dataSetBits(Payload packet){
@@ -302,11 +307,10 @@ void Astronet::parsePaket(Payload& paket){
 };
 
 void Astronet::readInfo(){
-  printf("********** ASTRONET INFO **********\n");
+  printf("\n[ASTRONET INFO]\n");
   printf("Node:%x\n", address);
   printf("PIN:%x\n", pin);
   printf("InBound:%d\n", inbound_inedx);
-  printf("OutBound:%d\n", outbound_inedx);
   printf("History:%d\n", history_inedx);
   printf("Neighbour:%d\n", neighbor_index);
   printf("Success:%d\n", success);

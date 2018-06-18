@@ -9,12 +9,10 @@
 #define __ASTRONET_CONFIG_H__
 
 #define __ASTRONET_MAX_INBOUND_BUFFER 10 //!< Max is 255
-#define __ASTRONET_MAX_OUTBOUND_BUFFER 10 //!< Max is 255
 #define __ASTRONET_MAX_HISTORY_SIZE 5
 #define __ASTRONET_PAYLOAD_SIZE 32
-#define __ASTRONET_RETRY_MAX_NUMBER 3
-#define __ASTRONET_RETRY_DELAY 35
-#define __ASTRONET_TRANSIT_TIMEOUT 1000 //!< value in milliseconds
+#define __ASTRONET_RETRY_MAX_NUMBER 20
+#define __ASTRONET_RETRY_DELAY 5
 #define __ASTRONET_MAX_NEIGHBORS_MEMORY 10 //!< maximum number of neighbor nodes to communicate
 #define __ASTRONET_BLIND_NODE_ADDRESS 0xFF
 #define __ASTRONET_BASE_NODE_ADDRESS 0x00
