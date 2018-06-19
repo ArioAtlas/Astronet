@@ -38,6 +38,7 @@ void Astronet::refresh(){
     while( radio.available(&pipeNo)&&radio.isChipConnected()){
       printf("\n\nRoP->#%d",pipeNo);
       radio.read( &temp, __ASTRONET_PAYLOAD_SIZE );
+      parsePaket((temp));
       if(temp.scs == (temp.from ^ temp.to)){
         if(temp.type<__ASTRONET_ACK_TYPE_DIVIDER){
           if(temp.to == address){
@@ -59,42 +60,56 @@ void Astronet::refresh(){
 };
 
 bool Astronet::write(uint8_t _to, Payload payload){
-    unsigned long started_waiting_at = millis();
-    bool timeout = false;
-    uint8_t retry = 0;
+    unsigned long started = millis();
+    unsigned long loop;
+    bool timeout;
+    int attempt = 1;
     Payload ply;
-    while (retry<__ASTRONET_RETRY_MAX_NUMBER) {
+    while (attempt<=__ASTRONET_RETRY_MAX_NUMBER) {
+      timeout = false;
       radio.openWritingPipe(_to);
       radio.stopListening();
       radio.write( &payload, __ASTRONET_PAYLOAD_SIZE );
       radio.startListening();
-      while ( ! radio.available() && ! timeout )
-        if (millis() - started_waiting_at > __ASTRONET_RETRY_DELAY )
+      loop = millis();
+      while ( ! radio.available() && ! timeout ){
+        if (millis() - loop > __ASTRONET_RETRY_DELAY ){
           timeout = true;
+          attempt++;
+        }
+      }
       if (!timeout){
         radio.read( &ply, 32 );
-        parsePaket(ply);
+        printf("\nSuccess %dms",(millis()-started));
+        printf("[R:%d]",attempt);
+
         if(payload.type == (ply.type+__ASTRONET_ACK_TYPE_DIVIDER
             && payload.to == ply.from
             && payload.from == ply.to
             && payload.id == ply.id))
         break;
       }
-      retry++;
     }
-
-    if(retry ==__ASTRONET_RETRY_MAX_NUMBER){
-      printf("\nfailed");
+    if(attempt >__ASTRONET_RETRY_MAX_NUMBER){
+      printf("\nFailed after %dms",(millis()-started));
+      printf("[R:%d]",attempt);
       removeNeighbor(payload.to);
       return false;
     }
     else{
-      printf("\nDLV in %dms [R:%d]",(millis()-started_waiting_at),retry);
+      printf("\nDLV in %dms",(millis()-started));
+      printf("[R:%d]",attempt);
       addNeighbor(payload.to);
       return true;
     }
   };
 
+bool Astronet::writeBlind(uint8_t _to, Payload payload){
+    radio.openWritingPipe(_to);
+    radio.stopListening();
+    radio.write( &payload, __ASTRONET_PAYLOAD_SIZE );
+    radio.startListening();
+  };
 /*!
  * \brief Send data throw mesh Network
  * \param to reciever node _address
@@ -217,7 +232,7 @@ void Astronet::acknowlede(Payload packet){
   packet.to = packet.from;
   packet.from = address;
   packet.router = address;
-  write(packet.to,packet);
+  writeBlind(packet.to,packet);
   printf("\nError in writing ack *%x-[%x] to #%x",packet.type,packet.id,packet.to );
 };
 
@@ -293,7 +308,8 @@ uint8_t Astronet::dataSetBits(Payload packet){
 };
 
 void Astronet::parsePaket(Payload& paket){
-  printf("\nRX=> FROM:%x ",paket.from);
+  printf("\nRX=> TP:%x ",paket.type);
+  printf("FROM:%x ",paket.from);
   printf("TO:%x ",paket.to);
   printf("SCS:%x ",paket.scs);
   printf("ID:%x ",paket.id);

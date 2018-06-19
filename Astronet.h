@@ -79,6 +79,7 @@ class Astronet{
     void refresh();
 
     bool write(uint8_t _to, Payload payload);
+    bool writeBlind(uint8_t _to, Payload payload);
 
     bool getData(Payload &item);
 
@@ -99,7 +100,7 @@ class Astronet{
     void loadPin();
 
     void loadAddress();
-    
+
     void initial();
 
     void setNewAddress(uint8_t _address);
