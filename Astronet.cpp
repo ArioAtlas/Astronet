@@ -112,8 +112,8 @@ bool Astronet::writeBlind(uint8_t _to, Payload payload){
   };
 /*!
  * \brief Send data throw mesh Network
- * \param to reciever node _address
- * \param *data pointer to data that you want to trasfer
+ * \param to receiver node _address
+ * \param *data pointer to data that you want to transfer
  * \param size size of data packet (Max 24bit)
  * \details this function handle trafsering data to destination node of
  * mesh network
